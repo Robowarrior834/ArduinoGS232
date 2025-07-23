@@ -143,6 +143,8 @@ String elRotorMovement;   // string for el rotor move display
 // create instance of NewSoftSerial 
 SoftwareSerial lcdSerial =  SoftwareSerial(_LcdRxPin, _LcdTxPin);
 
+void readAzimuth(bool averaging = true);
+void readElevation(bool averaging = true);
 //
 // run once at reset
 //
@@ -180,9 +182,9 @@ void setup()
     
     
     // set up rotor lcd display values
-    readAzimuth(); // get current azimuth from G-5500
+    readAzimuth(!_azimuthMove);  // get current azimuth from G-5500
     _previousRotorAzimuth = _rotorAzimuth + 1000;
-    readElevation(); // get current elevation from G-5500
+    readElevation(!_elevationMove); // get current elevation from G-5500
    _previousRotorElevation = _rotorElevation + 1000;    
 }
 
@@ -210,7 +212,7 @@ void loop()
          _rtcLastRotorUpdate = rtcCurrent; // reset rotor move timer base
          
          // AZIMUTH       
-         readAzimuth(); // get current azimuth from G-5500
+         readAzimuth(!_azimuthMove);   // get current azimuth from G-5500
          // see if azimuth move is required
          if ( (abs(_rotorAzimuth - _newAzimuth) > _closeEnough) && _azimuthMove ) 
          {
@@ -225,7 +227,7 @@ void loop()
          }
          
          // ELEVATION       
-         readElevation(); // get current elevation from G-5500
+         readElevation(!_elevationMove); // get current elevation from G-5500
          // see if aelevation move is required
          if ( abs(_rotorElevation - _newElevation) > _closeEnough && _elevationMove ) // move required
          {
@@ -325,40 +327,59 @@ void updateAzimuthMove()
 }
 
 
-//
-// read azimuth from G5500
-//
-void readElevation()
+// Read and update the rotor elevation
+// If averaging is true and rotor is not moving, average multiple samples
+// Otherwise, use a single raw analog reading (faster, avoids motion lag)
+void readElevation(bool averaging = true)
 {
-   const int numReadings = 10;  // Number of readings to average
-    long total = 0;
+   long sensorValue;
 
-    for (int i = 0; i < numReadings; i++) {
-        total += analogRead(_elevationInputPin);
-        delay(5);  // Small delay between readings to allow ADC to settle
-    }
+   if (averaging && !_elevationMove) {
+       const int numReadings = 10;
+       long total = 0;
 
-    long averageSensorValue = total / numReadings;
-    _rotorElevation = (averageSensorValue * 10000L) / _elScaleFactor;
+       // Take multiple samples to reduce noise when stationary
+       for (int i = 0; i < numReadings; i++) {
+           total += analogRead(_elevationInputPin);
+           delay(5);  // Allow ADC to settle
+       }
 
+       sensorValue = total / numReadings;
+   } else {
+       // Take single reading when moving for faster, real-time updates
+       sensorValue = analogRead(_elevationInputPin);
+   }
+
+   // Convert sensor value to degrees * 100
+   _rotorElevation = (sensorValue * 10000L) / _elScaleFactor;
 }
 
 
-//
-// read azimuth from G5500
-//
-void readAzimuth()
+// Read and update the rotor azimuth
+// If averaging is true and rotor is not moving, average multiple samples
+// Otherwise, use a single raw analog reading (faster, avoids motion lag)
+void readAzimuth(bool averaging = true)
 {
-    const int numReadings = 10;  // Number of readings to average
-    long total = 0;
+   long sensorValue;
 
-    for (int i = 0; i < numReadings; i++) {
-        total += analogRead(_azimuthInputPin);
-        delay(5);  // Optional delay to allow ADC to stabilize
-    }
+   if (averaging && !_azimuthMove) {
+       const int numReadings = 10;
+       long total = 0;
 
-    long averageSensorValue = total / numReadings;
-    _rotorAzimuth = ((averageSensorValue * 10000L) / _azScaleFactor) - _azAdZeroOffset;
+       // Take multiple samples to reduce noise when stationary
+       for (int i = 0; i < numReadings; i++) {
+           total += analogRead(_azimuthInputPin);
+           delay(5);  // Allow ADC to settle
+       }
+
+       sensorValue = total / numReadings;
+   } else {
+       // Take single reading when moving for faster, real-time updates
+       sensorValue = analogRead(_azimuthInputPin);
+   }
+
+   // Convert sensor value to degrees * 100 and apply zero offset
+   _rotorAzimuth = ((sensorValue * 10000L) / _azScaleFactor) - _azAdZeroOffset;
 }
 
 
